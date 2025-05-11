@@ -32,7 +32,8 @@ class MotorControlApp:
         self.monitor_task = None  # For continuous monitoring
         self.controllers = {}  # To store motor controllers
         self.prevfiltpos = None # store previous pos
-        self.alpha = 0.95 # filtering alpha 
+        self.alpha = 0.5 # filtering alpha
+        self.tau = 0.01 # max torque 
         
         # Create GUI elements
         self.create_widgets()
@@ -57,6 +58,19 @@ class MotorControlApp:
             command=self.update_alpha
         )
         self.update_alpha_btn.grid(row=3, column=2, padx=5, pady=5)
+
+        # Torque input
+        ttk.Label(self.root, text="Max Torque:").grid(row=4, column=0, padx=5, pady=5)
+        self.tau_entry = ttk.Entry(self.root, width=8)
+        self.tau_entry.insert(0, str(self.tau))  # Set default value
+        self.tau_entry.grid(row=4, column=1, padx=5, pady=5)
+
+        self.update_tau_btn = ttk.Button(
+            self.root, 
+            text="Update Torque",
+            command=self.update_tau
+        )
+        self.update_tau_btn.grid(row=4, column=2, padx=5, pady=5)
 
         # Position displays
         ttk.Label(self.root, text="Trigger Position:").grid(row=0, column=0, padx=5, pady=5)
@@ -104,7 +118,7 @@ class MotorControlApp:
         try:
             new_alpha = float(self.alpha_entry.get())
             if 0 <= new_alpha <= 1:
-                self.alpha = new_alpha
+                self.alpha = float(new_alpha)
                 #messagebox.showinfo("Success", f"Alpha updated to {new_alpha}")
             else:
                 #messagebox.showerror("Error", "Alpha must be between 0 and 1")
@@ -114,6 +128,19 @@ class MotorControlApp:
             #messagebox.showerror("Error", "Please enter a valid number")
             self.alpha_entry.delete(0, tk.END)
             self.alpha_entry.insert(0, str(self.alpha))
+
+    def update_tau(self):
+        """Update the alpha filtering value from the GUI input"""
+        try:
+            new_tau = float(self.tau_entry.get())
+            if 0 <= new_tau <= 0.4:
+                self.tau = float(new_tau)
+            else:
+                self.tau_entry.delete(0, tk.END)
+                self.tau_entry.insert(0, str(self.tau))
+        except ValueError:
+            self.tau_entry.delete(0, tk.END)
+            self.tau_entry.insert(0, str(self.tau))
         
     def update_positions(self, trigger_pos, gripper_pos, trigger_torque, gripper_torque):
         self.trigger_pos.config(text=f"{trigger_pos:.2f} rot")
@@ -174,13 +201,14 @@ class MotorControlApp:
                     query=True
                 )
                 position = state1.values[moteus.Register.POSITION]
-                filtered = self.alpha * self.prevfiltpos + (1 - self.alpha) * position
+                filtered = self.alpha * self.prevfiltpos + (1.0 - self.alpha) * position
                 await c2.set_position(
                     position=7-filtered,
-                    maximum_torque=0.1,
+                    maximum_torque=self.tau,
                     query=True
                 )
-                self.prevfiltpos = position
+                #print(self.alpha, self.prevfiltpos, position)
+                self.prevfiltpos = filtered
                 await asyncio.sleep(1/1000)
                 
         finally:
