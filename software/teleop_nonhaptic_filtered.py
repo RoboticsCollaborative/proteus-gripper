@@ -14,6 +14,7 @@ import moteus
 import tkinter as tk
 from tkinter import ttk, messagebox
 from threading import Thread
+import numpy as np
 
 class MotorControlApp:
     def __init__(self, root):
@@ -33,7 +34,8 @@ class MotorControlApp:
         self.controllers = {}  # To store motor controllers
         self.prevfiltpos = None # store previous pos
         self.alpha = 0.5 # filtering alpha
-        self.tau = 0.01 # max torque 
+        self.tau = 0.01 # max torque
+        self.comp_tau = 0.0 # jitter torque
         
         # Create GUI elements
         self.create_widgets()
@@ -71,6 +73,19 @@ class MotorControlApp:
             command=self.update_tau
         )
         self.update_tau_btn.grid(row=4, column=2, padx=5, pady=5)
+
+        # Torque input
+        ttk.Label(self.root, text="Comp Torque:").grid(row=5, column=0, padx=5, pady=5)
+        self.comp_entry = ttk.Entry(self.root, width=8)
+        self.comp_entry.insert(0, str(self.tau))  # Set default value
+        self.comp_entry.grid(row=5, column=1, padx=5, pady=5)
+
+        self.update_comp_btn = ttk.Button(
+            self.root, 
+            text="Update Comp",
+            command=self.update_jitter
+        )
+        self.update_comp_btn.grid(row=5, column=2, padx=5, pady=5)
 
         # Position displays
         ttk.Label(self.root, text="Trigger Position:").grid(row=0, column=0, padx=5, pady=5)
@@ -141,6 +156,19 @@ class MotorControlApp:
         except ValueError:
             self.tau_entry.delete(0, tk.END)
             self.tau_entry.insert(0, str(self.tau))
+
+    def update_jitter(self):
+        """Update the alpha filtering value from the GUI input"""
+        try:
+            new_tau = float(self.comp_entry.get())
+            if 0 <= new_tau <= 0.4:
+                self.comp_tau = float(new_tau)
+            else:
+                self.comp_entry.delete(0, tk.END)
+                self.comp_entry.insert(0, str(self.comp_tau))
+        except ValueError:
+            self.comp_entry.delete(0, tk.END)
+            self.comp_entry.insert(0, str(self.comp_tau))
         
     def update_positions(self, trigger_pos, gripper_pos, trigger_torque, gripper_torque):
         self.trigger_pos.config(text=f"{trigger_pos:.2f} rot")
@@ -202,10 +230,14 @@ class MotorControlApp:
                 )
                 position = state1.values[moteus.Register.POSITION]
                 filtered = self.alpha * self.prevfiltpos + (1.0 - self.alpha) * position
+                self.comp_tau = -self.comp_tau
+
                 await c2.set_position(
                     position=7-filtered,
+                    # position = float('nan'),
                     maximum_torque=self.tau,
-                    query=True
+                    query=True,
+                    feedforward_torque=self.comp_tau
                 )
                 #print(self.alpha, self.prevfiltpos, position)
                 self.prevfiltpos = filtered
