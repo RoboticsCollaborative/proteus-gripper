@@ -1,0 +1,4 @@
+.gitignore
+.venv/
+software/moteus/
+software/moteus-cal*.log
